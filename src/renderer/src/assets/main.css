@@ -1,0 +1,208 @@
+/* Load Tailwind v4 */
+@import "tailwindcss";
+
+/* ===== FONT FACE ===== */
+@font-face {
+  font-family: "Aldrich";
+  src: url("./fonts/Aldrich-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans";
+  src: url("./fonts/NotoSans-Regular.ttf") format("truetype");
+  font-display: swap;
+}
+
+/* ===== GLOBAL BASE STYLES ===== */
+@layer base {
+  /* penting: tinggi penuh untuk layout flex & sticky header */
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    /* Wallpaper */
+    background-image: url("./images/background.png");
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    /* kunci supaya tidak “bergerak” saat konten overflow */
+    background-attachment: fixed;
+
+    background-color: #070b12;
+    color: #ffffff;
+
+    /* BODY Font */
+    font-family: "Noto Sans", ui-sans-serif, system-ui, sans-serif;
+
+    /* biarkan body bisa scroll (jangan hidden) */
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+/* ===== APP SHELL (layout) ===== */
+@layer components {
+  /* Wrapper aplikasi: layar penuh, kolom, agar header sticky stabil */
+  .app-shell {
+    min-height: 100dvh; /* aman di desktop + menangani address bar mobile */
+    display: flex;
+    flex-direction: column;
+  }
+
+
+  /* Konten fleksibel yang boleh scroll */
+  .app-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+/* ===== COMPONENT STYLES ===== */
+@layer components {
+  /* Converter Title */
+  .converter-title {
+    font-family: "Aldrich", sans-serif;
+    font-weight: 400;
+    font-size: 32px;
+    line-height: 140%;
+  }
+
+  /* SDP Converter Card */
+  .sdp-card {
+    background: linear-gradient(180deg, #090F18 0%, #0C1016 100%);
+    border-top: 1.5px solid #344865;
+    border-bottom: 1.5px solid #344865;
+    box-shadow: -1px -4px 13.9px 0px #4F85D180 inset;
+    border-radius: 12px;
+  }
+  .sdp-card:hover {
+    box-shadow: -1px -4px 18px 0px #4F85D1AA inset;
+    transition: box-shadow 0.25s ease-in-out;
+  }
+
+  /* Buttons */
+  .action-btn {
+    background: #1f2d40;
+    border: 1px solid #344865;
+    border-radius: 8px;
+    padding: 6px 14px;
+    transition: 0.25s;
+  }
+  .action-btn:hover {
+    background: #2c3e55;
+    border-color: #4f85d1;
+  }
+
+    .app-header{
+    top: 0;
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid #ffffff1a;
+  }
+}
+
+/* ===== UTILITIES ===== */
+@layer utilities {
+  .text-glow {
+    text-shadow: 0 0 12px rgba(79, 133, 209, 0.7);
+  }
+
+  /* Scrollbar halus untuk panel list */
+  .scroll-thin {
+    scrollbar-width: thin;
+  }
+  .scroll-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: #2e3a4d;
+    border-radius: 9999px;
+  }
+  .scroll-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Blink animation */
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.45; }
+  100% { opacity: 1; }
+}
+
+/* ===== STATUS SHIMMER TEXT & BADGE ===== */
+@layer utilities {
+  /* Shimmer bergerak dari kanan → kiri */
+  @keyframes shimmer {
+    0% { background-position: 200% center; }
+    100% { background-position: -200% center; }
+  }
+
+  /* Badge parent: solid background, fixed */
+  .status-badge {
+    width: 184px;
+    height: 44px;
+    padding: 8px 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  /* Loading text only: gradient clipped to text + shimmer animation */
+  .status-loading {
+    background: linear-gradient(90deg, #ffffff 0%, #c8d4e4 50%, #ffffff 100%);
+    background-size: 200% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 1.4s linear infinite;
+    display: inline-block;
+  }
+
+  .status-text {
+    color: #ffffff;
+    display: inline-block;
+  }
+
+  .btn-browse {
+    background: radial-gradient(50% 50% at 50% 50%, #EDC702 0%, rgba(237, 199, 2, 0.7) 100%);
+    border: 3px solid #EDC702B2;
+    color: #000;
+    padding: 10px 22px;
+    border-radius: 6px;
+    font-family: "Noto Sans", sans-serif;
+    font-weight: 600;
+    font-size: 16px;
+    transition: all 0.25s ease;
+  }
+  .btn-browse:hover {
+    filter: brightness(1.15);
+    transform: translateY(-1px);
+  }
+}
+
+@layer utilities {
+  :root {
+    --sdp-row-h: 64px;     /* tinggi 1 item list */
+    --sdp-panel-pad: 24px; /* ruang padding dalam panel */
+  }
+
+  /* Panel list: scroll hanya di sini, dibatasi 5 baris */
+  .sdp-list-panel {
+    max-height: calc((var(--sdp-row-h) * 5) + var(--sdp-panel-pad));
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Tiap item list “mengunci” tinggi */
+  .sdp-row {
+    min-height: var(--sdp-row-h);
+  }
+}
