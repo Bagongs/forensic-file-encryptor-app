@@ -155,7 +155,7 @@ export default function ConverterHome() {
       </div>
 
       {/* CARD AREA */}
-      <main className="flex-1 w-full flex items-start justify-center pt-4">
+      <main className="flex-1 w-full flex items-center justify-center pt-10">
         <ConverterCard>
           <h1 className="text-center text-xl font-semibold mb-1">SDP Converter</h1>
           <p className="text-center text-gray-400 mb-8">

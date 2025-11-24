@@ -206,3 +206,8 @@
     min-height: var(--sdp-row-h);
   }
 }
+
+#root {
+  transform: scale(1.25);
+  transform-origin: center center;
+}
