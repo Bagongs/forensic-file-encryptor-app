@@ -6,7 +6,7 @@ export default function HeaderBar() {
       className="w-full h-24 bg-no-repeat bg-left"
       style={{
         backgroundImage: `url(${headerImg})`,
-        backgroundSize: 'cover'
+        backgroundSize: 'contain'
       }}
     ></div>
   )
