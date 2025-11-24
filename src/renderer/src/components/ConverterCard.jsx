@@ -3,7 +3,7 @@ export default function ConverterCard({ children }) {
   return (
     <div
       className="
-        w-[850px]
+        w-[991px]
         rounded-xl 
         p-10 
         bg-linear-to-b from-[#090F18] to-[#0C1016]
