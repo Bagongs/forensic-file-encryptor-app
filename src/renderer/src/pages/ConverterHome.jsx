@@ -151,7 +151,7 @@ export default function ConverterHome() {
     <>
       {/* TITLE */}
       <div className="w-full px-[51px] pt-[46px]">
-        <h1 className="text-white text-2xl tracking-wide font-semibold">CONVERTER</h1>
+        <h1 className="text-white text-4xl tracking-wide font-semibold">CONVERTER</h1>
       </div>
 
       {/* CARD AREA */}
