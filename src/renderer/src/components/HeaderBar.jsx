@@ -1,4 +1,4 @@
-import headerImg from '../assets/images/header.png'
+import headerImg from '../assets/images/header-full.png'
 
 export default function HeaderBar() {
   return (
