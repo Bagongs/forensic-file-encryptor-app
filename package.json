@@ -1,6 +1,7 @@
 {
   "name": "file-encryptor-app",
   "version": "1.0.0",
+  "productName": "Encryptor Analytics Platform",
   "description": "An Electron application with React",
   "main": "./out/main/index.js",
   "author": "example.com",

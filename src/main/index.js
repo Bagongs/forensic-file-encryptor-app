@@ -16,6 +16,7 @@ const progressTimers = new Map()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
+    title: 'Encryptor Analytics Platform',
     width: 900,
     height: 670,
     show: false,
