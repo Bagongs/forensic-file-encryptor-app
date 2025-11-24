@@ -7,7 +7,10 @@ import ConvertedList from './components/ConvertedList'
 export default function App() {
   const [files, setFiles] = useState([])
 
-  // ✅ hoisted helper
+  /* ============================================================
+     HELPERS
+  ============================================================ */
+  // Gabung list file tanpa duplikasi (pakai "name" sebagai key)
   function mergeByName(a, b) {
     const map = new Map()
     ;[...a, ...b].forEach((item) => {
@@ -16,9 +19,22 @@ export default function App() {
     return Array.from(map.values())
   }
 
+  // Sort DESC (terbaru paling atas)
+  function sortFiles(files) {
+    return [...files].sort((a, b) => {
+      const ta = new Date(a.timestamp || 0).getTime()
+      const tb = new Date(b.timestamp || 0).getTime()
+      return tb - ta
+    })
+  }
+
+  /* ============================================================
+     FETCH LIST SDP (initial + auto-refresh)
+  ============================================================ */
   const fetchList = useCallback(async () => {
     try {
       const list = await window.fileEncryptor.listSdp()
+
       const mapped = (list || []).map((it) => ({
         name: it.converted_filename,
         originalName: it.original_filename,
@@ -27,35 +43,38 @@ export default function App() {
         timestamp: it.timestamp,
         progress: 100
       }))
-      setFiles((prev) => mergeByName(prev, mapped))
+
+      setFiles((prev) => sortFiles(mergeByName(prev, mapped)))
     } catch (e) {
       console.error('listSdp error:', e)
     }
   }, [])
 
-  // 1) Fetch list-sdp saat mount
   useEffect(() => {
     fetchList()
   }, [fetchList])
 
-  // 2) Update status saat ada progress
+  /* ============================================================
+     PROGRESS + COMPLETE EVENT
+  ============================================================ */
   useEffect(() => {
     const unsubProgress = window.fileEncryptor.onProgress(
-      ({ uploadId, status, progress, convertedFilename }) => {
+      ({ uploadId, convertedFilename, status, progress }) => {
         setFiles((prev) =>
-          prev.map((f) => {
-            const matchById = uploadId && f.uploadId === uploadId
-            const matchByName = convertedFilename && f.name === convertedFilename
+          sortFiles(
+            prev.map((f) => {
+              const matchById = uploadId && f.uploadId === uploadId
+              const matchByName = convertedFilename && f.name === convertedFilename
+              if (!matchById && !matchByName) return f
 
-            if (!matchById && !matchByName) return f
-
-            return {
-              ...f,
-              status:
-                status === 'converted' ? 'done' : status === 'failed' ? 'error' : 'converting',
-              progress: typeof progress === 'number' ? progress : f.progress
-            }
-          })
+              return {
+                ...f,
+                status:
+                  status === 'converted' ? 'done' : status === 'failed' ? 'error' : 'converting',
+                progress: typeof progress === 'number' ? progress : f.progress
+              }
+            })
+          )
         )
       }
     )
@@ -70,23 +89,29 @@ export default function App() {
     }
   }, [fetchList])
 
-  // 3) Upload baru (convert)
+  /* ============================================================
+     HANDLE FILE UPLOAD (convert)
+  ============================================================ */
   const handleFileSelect = async (file) => {
     if (!file) return
+
     const originalName = file.name
     const displayName = originalName.replace(/\.(xls|xlsx|csv|txt)$/i, '') + '.sdp'
 
-    // placeholder converting
+    // Tambahkan placeholder converting
     setFiles((prev) =>
-      mergeByName(prev, [
-        {
-          name: displayName,
-          originalName,
-          status: 'converting',
-          uploadId: null,
-          progress: 0
-        }
-      ])
+      sortFiles(
+        mergeByName(prev, [
+          {
+            name: displayName,
+            originalName,
+            status: 'converting',
+            uploadId: null,
+            progress: 0,
+            timestamp: Date.now() // supaya muncul paling atas sebagai NEW
+          }
+        ])
+      )
     )
 
     try {
@@ -96,24 +121,31 @@ export default function App() {
         name: originalName
       })
 
-      // update uploadId -> match by name (displayName)
+      // isi uploadId
       setFiles((prev) =>
-        prev.map((f) =>
-          f.name === (result.convertedFilename || displayName) && f.uploadId == null
-            ? { ...f, uploadId: result.uploadId }
-            : f
+        sortFiles(
+          prev.map((f) =>
+            f.name === (result.convertedFilename || displayName) && f.uploadId == null
+              ? { ...f, uploadId: result.uploadId }
+              : f
+          )
         )
       )
     } catch (e) {
       console.error('convertFile error:', e)
       alert(`Gagal upload/convert:\n${e?.message || e}`)
+
       setFiles((prev) =>
-        prev.map((f) => (f.name === displayName ? { ...f, status: 'error', progress: 0 } : f))
+        sortFiles(
+          prev.map((f) => (f.name === displayName ? { ...f, status: 'error', progress: 0 } : f))
+        )
       )
     }
   }
 
-  // 4) Download file .sdp (save dialog)
+  /* ============================================================
+     DOWNLOAD FILE
+  ============================================================ */
   const handleDownload = async (file) => {
     try {
       if (!file?.name?.toLowerCase().endsWith('.sdp')) {
@@ -135,6 +167,9 @@ export default function App() {
     }
   }
 
+  /* ============================================================
+     RENDER
+  ============================================================ */
   return (
     <div className="w-screen h-screen flex flex-col bg-cover bg-center">
       <div className="app-header">
@@ -151,7 +186,6 @@ export default function App() {
           </p>
 
           <DropZone onFileSelect={handleFileSelect} />
-          {/* files berisi status + progress, ConvertedList bisa pakai progress bar */}
           <ConvertedList files={files} onDownload={handleDownload} />
         </ConverterCard>
       </div>
