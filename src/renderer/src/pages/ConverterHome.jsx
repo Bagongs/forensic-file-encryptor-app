@@ -47,23 +47,47 @@ export default function ConverterHome() {
 
   useEffect(() => {
     const unsubProgress = window.fileEncryptor.onProgress(
-      ({ uploadId, convertedFilename, status, progress }) => {
-        setFiles((prev) =>
-          sortFiles(
-            prev.map((f) => {
-              const matchById = uploadId && f.uploadId === uploadId
-              const matchByName = convertedFilename && f.name === convertedFilename
-              if (!matchById && !matchByName) return f
+      ({ uploadId, originalFilename, convertedFilename, status, progress }) => {
+        setFiles((prev) => {
+          let next = prev
+          let found = false
 
-              return {
-                ...f,
+          // 1) update item yang sudah ada
+          next = next.map((f) => {
+            const matchById = uploadId && f.uploadId === uploadId
+            const matchByName = convertedFilename && f.name === convertedFilename
+            const matchByOriginal = originalFilename && f.originalName === originalFilename
+
+            if (!matchById && !matchByName && !matchByOriginal) return f
+            found = true
+
+            return {
+              ...f,
+              name: convertedFilename || f.name, // sync nama final dari backend
+              uploadId: uploadId || f.uploadId,
+              status:
+                status === 'converted' ? 'done' : status === 'failed' ? 'error' : 'converting',
+              progress: typeof progress === 'number' ? progress : f.progress
+            }
+          })
+
+          // 2) kalau belum ketemu karena mismatch, buat item baru
+          if (!found && (convertedFilename || originalFilename || uploadId)) {
+            next = mergeByName(next, [
+              {
+                name: convertedFilename || originalFilename || `upload-${uploadId}`,
+                originalName: originalFilename || convertedFilename,
                 status:
                   status === 'converted' ? 'done' : status === 'failed' ? 'error' : 'converting',
-                progress: typeof progress === 'number' ? progress : f.progress
+                uploadId: uploadId || null,
+                progress: typeof progress === 'number' ? progress : 0,
+                timestamp: Date.now()
               }
-            })
-          )
-        )
+            ])
+          }
+
+          return sortFiles(next)
+        })
       }
     )
 
@@ -82,11 +106,14 @@ export default function ConverterHome() {
 
     const originalName = file.name
     const displayName = originalName.replace(/\.(xls|xlsx|csv|txt)$/i, '') + '.sdp'
+    const clientId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
 
+    // optimistic add
     setFiles((prev) =>
       sortFiles(
         mergeByName(prev, [
           {
+            clientId,
             name: displayName,
             originalName,
             status: 'converting',
@@ -105,11 +132,20 @@ export default function ConverterHome() {
         name: originalName
       })
 
+      const finalName = result.convertedFilename || displayName
+      const finalUploadId = result.uploadId
+
+      // ✅ update item by clientId (pasti ketemu), sekaligus rename ke nama backend
       setFiles((prev) =>
         sortFiles(
           prev.map((f) =>
-            f.name === (result.convertedFilename || displayName) && f.uploadId == null
-              ? { ...f, uploadId: result.uploadId }
+            f.clientId === clientId
+              ? {
+                  ...f,
+                  name: finalName,
+                  uploadId: finalUploadId,
+                  status: 'converting'
+                }
               : f
           )
         )
@@ -120,7 +156,7 @@ export default function ConverterHome() {
 
       setFiles((prev) =>
         sortFiles(
-          prev.map((f) => (f.name === displayName ? { ...f, status: 'error', progress: 0 } : f))
+          prev.map((f) => (f.clientId === clientId ? { ...f, status: 'error', progress: 0 } : f))
         )
       )
     }

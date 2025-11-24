@@ -195,7 +195,6 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
     progressTimers.delete(uploadId)
   }
 
-  let lastStatus = null
   let errorStreak = 0
   const maxErrorStreak = 5
 
@@ -221,8 +220,8 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         })
       }
 
-      if (status !== lastStatus && (status === 'converted' || status === 'failed')) {
-        // kirim event "selesai" sekali
+      // ✅ hentikan polling kalau terminal, tanpa ngandelin perubahan lastStatus
+      if (status === 'converted' || status === 'failed') {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('convert-complete', {
             uploadId,
@@ -234,8 +233,6 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         clearInterval(timer)
         progressTimers.delete(uploadId)
       }
-
-      lastStatus = status
     } catch (err) {
       errorStreak += 1
       console.error('[pollProgress] ERROR', {
@@ -267,7 +264,7 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         }
       }
     }
-  }, 1500)
+  }, 700)
 
   progressTimers.set(uploadId, timer)
 }
