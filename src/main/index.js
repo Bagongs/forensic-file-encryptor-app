@@ -54,7 +54,7 @@ app.whenReady().then(async () => {
   let probed = false
   for (const url of probeTargets) {
     try {
-      const resp = await axios.get(url, { timeout: 2500, validateStatus: () => true })
+      const resp = await axios.get(url, { validateStatus: () => true })
       console.log('[probe] backend reachable:', { url, status: resp.status })
       probed = true
       break
@@ -114,8 +114,7 @@ const sanitizeFilename = (filename = '') => {
 ipcMain.handle('list-sdp', async () => {
   try {
     const res = await axios.get(`${API_BASE}/api/v1/file-encryptor/list-sdp`, {
-      validateStatus: (s) => s < 500,
-      timeout: 10000
+      validateStatus: (s) => s < 500
     })
     if (res.status >= 400) {
       const msg = res.data?.message || `HTTP ${res.status}`
@@ -155,7 +154,6 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
 
     const uploadRes = await axios.post(`${API_BASE}/api/v1/file-encryptor/convert-to-sdp`, form, {
       headers: form.getHeaders(),
-      timeout: 60000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       validateStatus: (s) => s < 500
@@ -204,8 +202,7 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
   const timer = setInterval(async () => {
     try {
       const res = await axios.get(url, {
-        validateStatus: (s) => s < 500,
-        timeout: 10000
+        validateStatus: (s) => s < 500
       })
 
       const data = res.data?.data || {}
@@ -291,8 +288,7 @@ ipcMain.handle('download-file', async (_, filename) => {
 
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      validateStatus: (s) => s < 500,
-      timeout: 60000
+      validateStatus: (s) => s < 500
     })
 
     if (response.status === 404) {
