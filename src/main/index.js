@@ -14,6 +14,17 @@ let mainWindow
 
 const progressTimers = new Map()
 
+// ============================================================
+// IPC DEBUG LOGGER (MAIN)
+// ============================================================
+const isIpcDebug = process.env.IPC_DEBUG === '1' || is.dev
+function ipcSend(channel, payload) {
+  if (isIpcDebug) console.log(`[IPC → renderer] ${channel}`, payload)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload)
+  }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'Encryptor Analytics Platform',
@@ -38,7 +49,6 @@ function createWindow() {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // Production UX hardening kecil: block window.open
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 }
 
@@ -103,7 +113,6 @@ const toSdpName = (originalName = '') => {
 }
 
 const sanitizeFilename = (filename = '') => {
-  // prevent path traversal + illegal windows chars
   const base = path.basename(filename)
   return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
 }
@@ -164,10 +173,11 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
       throw new Error(`backend 4xx: ${backendMsg}`)
     }
 
+    // ✅ sesuai kontrak kamu: upload_id = string filename
     const uploadId = uploadRes.data?.data?.upload_id
     if (!uploadId) throw new Error('convert-file: backend did not return upload_id')
 
-    // mulai polling progres (kirim juga convertedFilename)
+    // mulai polling progres (kirim juga nama frontend)
     pollProgress(uploadId, filename, convertedFilename)
 
     return { uploadId, convertedFilename }
@@ -185,10 +195,11 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
 })
 
 /* ---------------------------------------------------
-   POLLING PROGRESS (retry + event lengkap)
+   POLLING PROGRESS (kontrak: /progress?upload_id=...)
 --------------------------------------------------- */
 function pollProgress(uploadId, originalFilename, convertedFilename) {
-  const url = `${API_BASE}/api/v1/file-encryptor/progress/${uploadId}`
+  // ✅ kontrak kamu pakai query param
+  const url = `${API_BASE}/api/v1/file-encryptor/progress?upload_id=${encodeURIComponent(uploadId)}`
 
   if (progressTimers.has(uploadId)) {
     clearInterval(progressTimers.get(uploadId))
@@ -200,9 +211,7 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
 
   const timer = setInterval(async () => {
     try {
-      const res = await axios.get(url, {
-        validateStatus: (s) => s < 500
-      })
+      const res = await axios.get(url, { validateStatus: (s) => s < 500 })
 
       const data = res.data?.data || {}
       const status = data.status
@@ -210,26 +219,22 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
 
       errorStreak = 0
 
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('convert-progress', {
+      ipcSend('convert-progress', {
+        uploadId,
+        originalFilename,
+        convertedFilename,
+        status,
+        progress
+      })
+
+      // ✅ stop ketika terminal
+      if (status === 'converted' || status === 'failed') {
+        ipcSend('convert-complete', {
           uploadId,
           originalFilename,
           convertedFilename,
-          status,
-          progress
+          status
         })
-      }
-
-      // ✅ hentikan polling kalau terminal, tanpa ngandelin perubahan lastStatus
-      if (status === 'converted' || status === 'failed') {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('convert-complete', {
-            uploadId,
-            originalFilename,
-            convertedFilename,
-            status
-          })
-        }
         clearInterval(timer)
         progressTimers.delete(uploadId)
       }
@@ -247,21 +252,19 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         clearInterval(timer)
         progressTimers.delete(uploadId)
 
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('convert-progress', {
-            uploadId,
-            originalFilename,
-            convertedFilename,
-            status: 'failed',
-            progress: 0
-          })
-          mainWindow.webContents.send('convert-complete', {
-            uploadId,
-            originalFilename,
-            convertedFilename,
-            status: 'failed'
-          })
-        }
+        ipcSend('convert-progress', {
+          uploadId,
+          originalFilename,
+          convertedFilename,
+          status: 'failed',
+          progress: 0
+        })
+        ipcSend('convert-complete', {
+          uploadId,
+          originalFilename,
+          convertedFilename,
+          status: 'failed'
+        })
       }
     }
   }, 700)
@@ -297,7 +300,6 @@ ipcMain.handle('download-file', async (_, filename) => {
       throw new Error(msg)
     }
 
-    // ✅ dialog pilih lokasi
     const defaultPath = join(app.getPath('downloads'), safeName)
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       title: 'Save SDP File',
@@ -305,9 +307,7 @@ ipcMain.handle('download-file', async (_, filename) => {
       filters: [{ name: 'SDP Files', extensions: ['sdp'] }]
     })
 
-    if (canceled || !filePath) {
-      return { canceled: true }
-    }
+    if (canceled || !filePath) return { canceled: true }
 
     await fs.promises.writeFile(filePath, response.data)
     return { savePath: filePath, canceled: false }
