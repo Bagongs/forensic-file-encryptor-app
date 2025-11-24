@@ -4,8 +4,10 @@ export default function ConverterCard({ children }) {
     <div
       className="
         w-[991px]
+        h-[900px]
         rounded-xl 
         p-10 
+        items-center
         bg-linear-to-b from-[#090F18] to-[#0C1016]
         border-t border-b border-[#344865]
         text-white
