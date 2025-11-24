@@ -10,7 +10,6 @@ export default function App() {
   /* ============================================================
      HELPERS
   ============================================================ */
-  // Gabung list file tanpa duplikasi (pakai "name" sebagai key)
   function mergeByName(a, b) {
     const map = new Map()
     ;[...a, ...b].forEach((item) => {
@@ -19,7 +18,6 @@ export default function App() {
     return Array.from(map.values())
   }
 
-  // Sort DESC (terbaru paling atas)
   function sortFiles(files) {
     return [...files].sort((a, b) => {
       const ta = new Date(a.timestamp || 0).getTime()
@@ -98,7 +96,6 @@ export default function App() {
     const originalName = file.name
     const displayName = originalName.replace(/\.(xls|xlsx|csv|txt)$/i, '') + '.sdp'
 
-    // Tambahkan placeholder converting
     setFiles((prev) =>
       sortFiles(
         mergeByName(prev, [
@@ -108,7 +105,7 @@ export default function App() {
             status: 'converting',
             uploadId: null,
             progress: 0,
-            timestamp: Date.now() // supaya muncul paling atas sebagai NEW
+            timestamp: Date.now()
           }
         ])
       )
@@ -121,7 +118,6 @@ export default function App() {
         name: originalName
       })
 
-      // isi uploadId
       setFiles((prev) =>
         sortFiles(
           prev.map((f) =>
@@ -171,24 +167,29 @@ export default function App() {
      RENDER
   ============================================================ */
   return (
-    <div className="w-screen h-screen flex flex-col bg-cover bg-center">
-      <div className="app-header">
+    <div className="min-h-screen w-full flex flex-col bg-cover bg-center overflow-hidden">
+      {/* Header tetap di atas */}
+      <div className="app-header shrink-0">
         <HeaderBar />
       </div>
 
-      <h1 className="converter-title ml-[51px] mt-[46px] mb-8 text-white">Converter</h1>
+      {/* Area konten yang selalu center */}
+      <main className="flex-1 w-full flex flex-col items-center justify-start px-6 pt-10 pb-8">
+        <div className="w-full max-w-[1100px]">
+          {/* Title jangan pakai ml/mt hardcode biar nggak geser saat zoom */}
+          <h1 className="converter-title mb-8 text-white text-2xl">Converter</h1>
 
-      <div className="flex justify-center">
-        <ConverterCard>
-          <h1 className="text-center text-xl font-semibold mb-1">SDP Converter</h1>
-          <p className="text-center text-gray-400 mb-8">
-            Please upload your data file (XLS, CSV, or TXT) to convert into SDP format.
-          </p>
+          <ConverterCard>
+            <h1 className="text-center text-xl font-semibold mb-1">SDP Converter</h1>
+            <p className="text-center text-gray-400 mb-8">
+              Please upload your data file (XLS, CSV, or TXT) to convert into SDP format.
+            </p>
 
-          <DropZone onFileSelect={handleFileSelect} />
-          <ConvertedList files={files} onDownload={handleDownload} />
-        </ConverterCard>
-      </div>
+            <DropZone onFileSelect={handleFileSelect} />
+            <ConvertedList files={files} onDownload={handleDownload} />
+          </ConverterCard>
+        </div>
+      </main>
     </div>
   )
 }
