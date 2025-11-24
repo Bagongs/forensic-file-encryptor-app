@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+/* eslint-disable no-control-regex */
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import path from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -8,8 +9,10 @@ import FormData from 'form-data'
 import { Readable } from 'stream'
 import icon from '../../resources/icon.png?asset'
 
-const API_BASE = 'http://172.15.2.191:8000'
+const API_BASE = process.env.API_BASE_URL || 'http://172.15.2.105:8000'
 let mainWindow
+
+const progressTimers = new Map()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -21,7 +24,7 @@ function createWindow() {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true
     }
   })
@@ -33,6 +36,9 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Production UX hardening kecil: block window.open
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 }
 
 app.whenReady().then(async () => {
@@ -60,6 +66,11 @@ app.whenReady().then(async () => {
   createWindow()
 })
 
+app.on('before-quit', () => {
+  for (const t of progressTimers.values()) clearInterval(t)
+  progressTimers.clear()
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
@@ -85,19 +96,30 @@ const guessMime = (name = '') => {
   return 'application/octet-stream'
 }
 
+const toSdpName = (originalName = '') => {
+  const base = path.parse(originalName).name
+  return `${base}.sdp`
+}
+
+const sanitizeFilename = (filename = '') => {
+  // prevent path traversal + illegal windows chars
+  const base = path.basename(filename)
+  return base.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+}
+
 /* ---------------------------------------------------
-   LIST SDP (baru)
+   LIST SDP
 --------------------------------------------------- */
 ipcMain.handle('list-sdp', async () => {
   try {
     const res = await axios.get(`${API_BASE}/api/v1/file-encryptor/list-sdp`, {
-      validateStatus: (s) => s < 500
+      validateStatus: (s) => s < 500,
+      timeout: 10000
     })
     if (res.status >= 400) {
       const msg = res.data?.message || `HTTP ${res.status}`
       throw new Error(`list-sdp 4xx: ${msg}`)
     }
-    // res.data.data = array of {original_filename, converted_filename, timestamp}
     return res.data?.data || []
   } catch (err) {
     console.error('[list-sdp] ERROR', {
@@ -120,6 +142,7 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
     const buf = toNodeBuffer(fileObj?.buffer)
     const filename = fileObj?.name || path.basename(fileObj?.path || 'upload.bin')
     const contentType = guessMime(filename)
+    const convertedFilename = toSdpName(filename)
 
     if (buf) {
       form.append('file', Readable.from(buf), { filename, contentType })
@@ -129,22 +152,12 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
       throw new Error('convert-file: missing file data (need buffer+name or a valid path string)')
     }
 
-    console.log('[convert-file] prepared form, about to POST', {
-      API_BASE,
-      filename,
-      contentType
-    })
-
     const uploadRes = await axios.post(`${API_BASE}/api/v1/file-encryptor/convert-to-sdp`, form, {
       headers: form.getHeaders(),
+      timeout: 60000,
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       validateStatus: (s) => s < 500
-    })
-
-    console.log('[convert-file] POST done:', {
-      status: uploadRes.status,
-      dataKeys: Object.keys(uploadRes.data || {})
     })
 
     if (uploadRes.status >= 400) {
@@ -155,9 +168,10 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
     const uploadId = uploadRes.data?.data?.upload_id
     if (!uploadId) throw new Error('convert-file: backend did not return upload_id')
 
-    // mulai polling progres
-    pollProgress(uploadId, filename)
-    return { uploadId }
+    // mulai polling progres (kirim juga convertedFilename)
+    pollProgress(uploadId, filename, convertedFilename)
+
+    return { uploadId, convertedFilename }
   } catch (err) {
     console.error('[convert-file] ERROR', {
       message: err?.message,
@@ -172,51 +186,116 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
 })
 
 /* ---------------------------------------------------
-   POLLING PROGRESS
+   POLLING PROGRESS (retry + event lengkap)
 --------------------------------------------------- */
-async function pollProgress(uploadId, filename) {
+function pollProgress(uploadId, originalFilename, convertedFilename) {
   const url = `${API_BASE}/api/v1/file-encryptor/progress/${uploadId}`
+
+  if (progressTimers.has(uploadId)) {
+    clearInterval(progressTimers.get(uploadId))
+    progressTimers.delete(uploadId)
+  }
+
+  let lastStatus = null
+  let errorStreak = 0
+  const maxErrorStreak = 5
 
   const timer = setInterval(async () => {
     try {
-      const res = await axios.get(url, { validateStatus: (s) => s < 500 })
-      const { status, progress } = res.data.data
+      const res = await axios.get(url, {
+        validateStatus: (s) => s < 500,
+        timeout: 10000
+      })
+
+      const data = res.data?.data || {}
+      const status = data.status
+      const progress = data.progress ?? 0
+
+      errorStreak = 0
 
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('convert-progress', {
           uploadId,
-          filename,
+          originalFilename,
+          convertedFilename,
           status,
           progress
         })
       }
 
-      if (status === 'converted' || status === 'failed') clearInterval(timer)
+      if (status !== lastStatus && (status === 'converted' || status === 'failed')) {
+        // kirim event "selesai" sekali
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('convert-complete', {
+            uploadId,
+            originalFilename,
+            convertedFilename,
+            status
+          })
+        }
+        clearInterval(timer)
+        progressTimers.delete(uploadId)
+      }
+
+      lastStatus = status
     } catch (err) {
+      errorStreak += 1
       console.error('[pollProgress] ERROR', {
         uploadId,
         message: err?.message,
         code: err?.code,
-        responseStatus: err?.response?.status
+        responseStatus: err?.response?.status,
+        errorStreak
       })
-      clearInterval(timer)
+
+      if (errorStreak >= maxErrorStreak) {
+        clearInterval(timer)
+        progressTimers.delete(uploadId)
+
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('convert-progress', {
+            uploadId,
+            originalFilename,
+            convertedFilename,
+            status: 'failed',
+            progress: 0
+          })
+          mainWindow.webContents.send('convert-complete', {
+            uploadId,
+            originalFilename,
+            convertedFilename,
+            status: 'failed'
+          })
+        }
+      }
     }
   }, 1500)
+
+  progressTimers.set(uploadId, timer)
 }
 
 /* ---------------------------------------------------
-   DOWNLOAD FILE (pakai nama .sdp persis)
+   DOWNLOAD FILE (save dialog)
 --------------------------------------------------- */
 ipcMain.handle('download-file', async (_, filename) => {
   try {
-    const url = `${API_BASE}/api/v1/file-encryptor/download-sdp?filename=${encodeURIComponent(filename)}`
+    const safeName = sanitizeFilename(filename)
+    if (!safeName.toLowerCase().endsWith('.sdp')) {
+      throw new Error('Only .sdp files can be downloaded')
+    }
+
+    const url = `${API_BASE}/api/v1/file-encryptor/download-sdp?filename=${encodeURIComponent(
+      safeName
+    )}`
+
     const response = await axios.get(url, {
       responseType: 'arraybuffer',
-      validateStatus: (s) => s < 500
+      validateStatus: (s) => s < 500,
+      timeout: 60000
     })
 
     if (response.status === 404) {
-      const msg = response.data?.message || `File not found: ${filename}`
+      const msg = response.data?.message || `File not found: ${safeName}`
       throw new Error(msg)
     }
     if (response.status >= 400) {
@@ -224,9 +303,20 @@ ipcMain.handle('download-file', async (_, filename) => {
       throw new Error(msg)
     }
 
-    const savePath = join(app.getPath('downloads'), filename)
-    fs.writeFileSync(savePath, response.data)
-    return { savePath }
+    // ✅ dialog pilih lokasi
+    const defaultPath = join(app.getPath('downloads'), safeName)
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save SDP File',
+      defaultPath,
+      filters: [{ name: 'SDP Files', extensions: ['sdp'] }]
+    })
+
+    if (canceled || !filePath) {
+      return { canceled: true }
+    }
+
+    await fs.promises.writeFile(filePath, response.data)
+    return { savePath: filePath, canceled: false }
   } catch (err) {
     console.error('[download-file] ERROR', {
       filename,
