@@ -3,7 +3,7 @@ import headerImg from '../assets/images/header-full.png'
 export default function HeaderBar() {
   return (
     <div
-      className="w-full h-24 bg-no-repeat bg-left"
+      className="w-full h-32 bg-no-repeat bg-left"
       style={{
         backgroundImage: `url(${headerImg})`,
         backgroundSize: 'contain'
