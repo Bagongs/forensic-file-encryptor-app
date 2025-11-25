@@ -89,7 +89,7 @@ export default function ConvertedList({ files = [], onDownload }) {
                     </div>
                   )}
 
-                  {isError && <p className="mt-1 text-xs text-red-400">Gagal dikonversi</p>}
+                  {isError && <p className="mt-1 text-xs text-red-400">Conversion Failed</p>}
                 </div>
               </div>
 
