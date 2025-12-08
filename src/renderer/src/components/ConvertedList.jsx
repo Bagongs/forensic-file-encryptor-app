@@ -5,19 +5,17 @@ import fileIcon from '../assets/icons/file.svg'
 
 export default function ConvertedList({ files = [], onDownload }) {
   // =========================
-  // HOOKS HARUS DI ATAS
+  // NEWEST FILE INDICATOR
   // =========================
   const newestKey = useMemo(() => {
     if (!files || files.length === 0) return null
-    // files sudah kamu sort newest-first di ConverterHome
-    const newest = files[0]
+    const newest = files[0] // already sorted newest-first
     return newest?.uploadId || newest?.name || null
   }, [files])
 
   const [showNewFor, setShowNewFor] = useState(null)
   const timerRef = useRef(null)
 
-  // ketika newest berubah → tampilkan NEW 3 detik
   useEffect(() => {
     if (!newestKey) return
 
@@ -33,9 +31,8 @@ export default function ConvertedList({ files = [], onDownload }) {
     }
   }, [newestKey])
 
-  // =========================
-  // EMPTY STATE SETELAH HOOK
-  // =========================
+  const [downloadingKey, setDownloadingKey] = useState(null)
+
   if (!files || files.length === 0) {
     return (
       <div className="sdp-list-panel scroll-thin rounded-xl border border-white/10 bg-[#0B111A]/70 backdrop-blur p-6 text-center text-white/60">
@@ -55,16 +52,18 @@ export default function ConvertedList({ files = [], onDownload }) {
           const key = file.uploadId || file.name
           const isNewest = showNewFor && key === showNewFor
 
+          const isThisDownloading = downloadingKey === key
+          const isOtherDownloading = downloadingKey !== null && downloadingKey !== key
+
           return (
             <li
               key={key}
               className="flex items-center justify-between gap-3 py-3 px-2 hover:bg-white/5 rounded-lg transition"
               onMouseEnter={() => {
-                // NEW hilang kalau di-hover
                 if (isNewest) setShowNewFor(null)
               }}
             >
-              {/* LEFT: icon + names */}
+              {/* LEFT SIDE */}
               <div className="flex items-center gap-3 min-w-0">
                 <img src={fileIcon} alt="" className="w-6 h-6 opacity-80" />
                 <div className="min-w-0">
@@ -93,15 +92,31 @@ export default function ConvertedList({ files = [], onDownload }) {
                 </div>
               </div>
 
-              {/* RIGHT: action */}
+              {/* RIGHT SIDE BUTTON */}
               <button
-                disabled={!isDone}
-                onClick={() => isDone && onDownload?.(file)}
+                disabled={
+                  !isDone || isOtherDownloading // disable for other files
+                }
+                onClick={async () => {
+                  if (!isDone || downloadingKey !== null) return
+
+                  setDownloadingKey(key) // lock downloads to this file
+
+                  try {
+                    await onDownload?.(file)
+                  } finally {
+                    setDownloadingKey(null) // unlock buttons
+                  }
+                }}
                 className={`shrink-0 flex items-center gap-2 px-3 py-2 rounded-md border border-white/10
-                  ${isDone ? 'hover:bg-white/10 text-white' : 'opacity-40 cursor-not-allowed text-white/60'}`}
+                  ${
+                    isDone && !isOtherDownloading
+                      ? 'hover:bg-white/10 text-white'
+                      : 'opacity-40 cursor-not-allowed text-white/60'
+                  }`}
               >
                 <img src={downloadIcon} alt="" className="w-4 h-4" />
-                <span className="text-xs">Download</span>
+                <span className="text-xs">{isThisDownloading ? 'Downloading…' : 'Download'}</span>
               </button>
             </li>
           )
