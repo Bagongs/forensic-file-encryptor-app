@@ -53,7 +53,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('encryptor-analytics-platform')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
