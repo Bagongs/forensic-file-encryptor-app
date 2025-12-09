@@ -322,3 +322,8 @@ ipcMain.handle('download-file', async (_, filename) => {
     throw new Error(`download-file failed: ${err?.message || err}`)
   }
 })
+
+ipcMain.on('quit-app', () => {
+  console.log('[IPC] quit-app → closing application')
+  app.quit()
+})

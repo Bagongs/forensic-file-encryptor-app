@@ -63,6 +63,10 @@ const api = {
     }
     ipcRenderer.on('convert-complete', handler)
     return () => ipcRenderer.removeListener('convert-complete', handler)
+  },
+  quitApp: () => {
+    logIpc('renderer → main (send)', 'quit-app', null)
+    ipcRenderer.send('quit-app')
   }
 }
 
