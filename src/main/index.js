@@ -28,8 +28,8 @@ function ipcSend(channel, payload) {
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'Encryptor Analytics Platform',
-    width: 900,
-    height: 670,
+    width: 1366,
+    height: 900,
     show: false,
     autoHideMenuBar: true,
     // fullscreen: true,
