@@ -71,3 +71,7 @@ const api = {
 }
 
 contextBridge.exposeInMainWorld('fileEncryptor', Object.freeze(api))
+
+contextBridge.exposeInMainWorld('license', {
+  getInfo: () => ipcRenderer.invoke('license:getInfo')
+})

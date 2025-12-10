@@ -4,10 +4,11 @@ import AboutButton from './components/common/AboutButton'
 
 import ConverterHome from './pages/ConverterHome'
 import AboutPage from './pages/AboutPage'
+import LicenseGate from './pages/LicensePage'
 
 function AppLayout() {
   return (
-    <div className="w-screen h-screen flex flex-col bg-cover bg-center overflow-hidden relative">
+    <div className="w-screen h-screen flex flex-col bg-cover bg-center relative">
       {/* HeaderBar konsisten */}
       <div className="app-header shrink-0">
         <HeaderBar />
@@ -24,11 +25,13 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<ConverterHome />} />
-        <Route path="/about" element={<AboutPage />} />
-      </Route>
-    </Routes>
+    <LicenseGate>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<ConverterHome />} />
+          <Route path="/about" element={<AboutPage />} />
+        </Route>
+      </Routes>
+    </LicenseGate>
   )
 }

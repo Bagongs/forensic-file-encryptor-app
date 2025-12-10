@@ -9,7 +9,7 @@ import FormData from 'form-data'
 import { Readable } from 'stream'
 import icon from '../../resources/icon.png?asset'
 
-const API_BASE = process.env.API_BASE_URL || 'http://172.15.2.105:8000'
+const API_BASE = import.meta.env?.VITE_API_BASE_URL || 'http://172.15.2.105:8000'
 let mainWindow
 
 const progressTimers = new Map()
@@ -326,4 +326,18 @@ ipcMain.handle('download-file', async (_, filename) => {
 ipcMain.on('quit-app', () => {
   console.log('[IPC] quit-app → closing application')
   app.quit()
+})
+
+ipcMain.handle('license:getInfo', async () => {
+  try {
+    const res = await axios.get(`${API_BASE}/license`)
+    return res.data
+  } catch (error) {
+    console.error('[IPC license:getInfo] Error:', error)
+    return {
+      status: 500,
+      message: 'Failed to get license',
+      error: error.message
+    }
+  }
 })
