@@ -28,11 +28,11 @@ function ipcSend(channel, payload) {
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'Encryptor Analytics Platform',
-    width: 900,
-    height: 670,
+    width: 1366,
+    height: 900,
     show: false,
     autoHideMenuBar: true,
-    fullscreen: true,
+    // fullscreen: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -41,7 +41,7 @@ function createWindow() {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show())
+  mainWindow.on('ready-to-show', () => mainWindow.show(), mainWindow.focus())
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
