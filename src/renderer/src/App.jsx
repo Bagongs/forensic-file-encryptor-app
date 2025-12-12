@@ -25,13 +25,13 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <LicenseGate>
-      <Routes>
+    <Routes>
+      <Route element={<LicenseGate />}>
         <Route element={<AppLayout />}>
           <Route path="/" element={<ConverterHome />} />
           <Route path="/about" element={<AboutPage />} />
         </Route>
-      </Routes>
-    </LicenseGate>
+      </Route>
+    </Routes>
   )
 }
