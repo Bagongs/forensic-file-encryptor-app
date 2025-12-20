@@ -25,6 +25,9 @@ function ipcSend(channel, payload) {
   }
 }
 
+// ============================================================
+// CREATE WINDOW (FAST STARTUP)
+// ============================================================
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: 'Encryptor Analytics Platform',
@@ -32,7 +35,7 @@ function createWindow() {
     height: 900,
     show: false,
     autoHideMenuBar: true,
-    // fullscreen: true,
+    backgroundColor: '#0b0f1a', // biar gak putih/flash saat loading
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -41,7 +44,11 @@ function createWindow() {
     }
   })
 
-  mainWindow.on('ready-to-show', () => mainWindow.show(), mainWindow.focus())
+  // ✅ perbaikan: focus jangan dipanggil di luar handler
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show()
+    mainWindow.focus()
+  })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -52,29 +59,58 @@ function createWindow() {
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 }
 
-app.whenReady().then(async () => {
+// ============================================================
+// BACKEND PROBE (NON-BLOCKING)
+// ============================================================
+async function probeBackendReachability() {
+  const probeTargets = [`${API_BASE}/docs`, `${API_BASE}/openapi.json`, API_BASE]
+  const timeoutMs = Number(process.env.PROBE_TIMEOUT_MS || 1200)
+
+  // paralel biar cepat
+  const requests = probeTargets.map((url) =>
+    axios
+      .get(url, {
+        timeout: timeoutMs,
+        validateStatus: () => true
+      })
+      .then((resp) => ({ ok: true, url, status: resp.status }))
+      .catch((err) => ({
+        ok: false,
+        url,
+        code: err?.code,
+        message: err?.message
+      }))
+  )
+
+  const results = await Promise.all(requests)
+  const firstOk = results.find((r) => r.ok)
+
+  if (firstOk) {
+    console.log('[probe] backend reachable:', firstOk)
+    ipcSend('backend-probe', { reachable: true, ...firstOk })
+  } else {
+    console.error('[probe] backend NOT reachable (all targets failed):', results)
+    ipcSend('backend-probe', { reachable: false, results })
+  }
+}
+
+// ============================================================
+// APP LIFECYCLE
+// ============================================================
+app.whenReady().then(() => {
   electronApp.setAppUserModelId('encryptor-analytics-platform')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // Probe reachability: coba /docs → /openapi.json → /
-  const probeTargets = [`${API_BASE}/docs`, `${API_BASE}/openapi.json`, API_BASE]
-  let probed = false
-  for (const url of probeTargets) {
-    try {
-      const resp = await axios.get(url, { validateStatus: () => true })
-      console.log('[probe] backend reachable:', { url, status: resp.status })
-      probed = true
-      break
-    } catch (e) {
-      console.warn('[probe] failed:', url, e?.code || e?.message)
-    }
-  }
-  if (!probed) console.error('[probe] backend NOT reachable from main process (all targets failed)')
-
+  // ✅ 1) Window muncul dulu → tidak delay
   createWindow()
+
+  // ✅ 2) Probe backend jalan belakangan → tidak nge-block
+  probeBackendReachability().catch((e) => {
+    console.error('[probe] unexpected error:', e?.message || e)
+  })
 })
 
 app.on('before-quit', () => {
@@ -123,6 +159,7 @@ const sanitizeFilename = (filename = '') => {
 ipcMain.handle('list-sdp', async () => {
   try {
     const res = await axios.get(`${API_BASE}/api/v1/file-encryptor/list-sdp`, {
+      timeout: Number(process.env.API_TIMEOUT_MS || 15000),
       validateStatus: (s) => s < 500
     })
     if (res.status >= 400) {
@@ -163,6 +200,7 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
 
     const uploadRes = await axios.post(`${API_BASE}/api/v1/file-encryptor/convert-to-sdp`, form, {
       headers: form.getHeaders(),
+      timeout: Number(process.env.API_TIMEOUT_MS || 60000),
       maxBodyLength: Infinity,
       maxContentLength: Infinity,
       validateStatus: (s) => s < 500
@@ -177,7 +215,7 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
     const uploadId = uploadRes.data?.data?.upload_id
     if (!uploadId) throw new Error('convert-file: backend did not return upload_id')
 
-    // mulai polling progres (kirim juga nama frontend)
+    // mulai polling progres
     pollProgress(uploadId, filename, convertedFilename)
 
     return { uploadId, convertedFilename }
@@ -198,7 +236,6 @@ ipcMain.handle('convert-file', async (_, fileObj) => {
    POLLING PROGRESS (kontrak: /progress?upload_id=...)
 --------------------------------------------------- */
 function pollProgress(uploadId, originalFilename, convertedFilename) {
-  // ✅ kontrak kamu pakai query param
   const url = `${API_BASE}/api/v1/file-encryptor/progress?upload_id=${encodeURIComponent(uploadId)}`
 
   if (progressTimers.has(uploadId)) {
@@ -208,10 +245,14 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
 
   let errorStreak = 0
   const maxErrorStreak = 5
+  const pollEveryMs = Number(process.env.PROGRESS_POLL_MS || 700)
 
   const timer = setInterval(async () => {
     try {
-      const res = await axios.get(url, { validateStatus: (s) => s < 500 })
+      const res = await axios.get(url, {
+        timeout: Number(process.env.API_TIMEOUT_MS || 15000),
+        validateStatus: (s) => s < 500
+      })
 
       const data = res.data?.data || {}
       const status = data.status
@@ -227,7 +268,6 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         progress
       })
 
-      // ✅ stop ketika terminal
       if (status === 'converted' || status === 'failed') {
         ipcSend('convert-complete', {
           uploadId,
@@ -267,7 +307,7 @@ function pollProgress(uploadId, originalFilename, convertedFilename) {
         })
       }
     }
-  }, 700)
+  }, pollEveryMs)
 
   progressTimers.set(uploadId, timer)
 }
@@ -282,11 +322,10 @@ ipcMain.handle('download-file', async (_, filename) => {
       throw new Error('Only .sdp files can be downloaded')
     }
 
-    const url = `${API_BASE}/api/v1/file-encryptor/download-sdp?filename=${encodeURIComponent(
-      safeName
-    )}`
+    const url = `${API_BASE}/api/v1/file-encryptor/download-sdp?filename=${encodeURIComponent(safeName)}`
 
     const response = await axios.get(url, {
+      timeout: Number(process.env.API_TIMEOUT_MS || 60000),
       responseType: 'arraybuffer',
       validateStatus: (s) => s < 500
     })
@@ -330,14 +369,17 @@ ipcMain.on('quit-app', () => {
 
 ipcMain.handle('license:getInfo', async () => {
   try {
-    const res = await axios.get(`${API_BASE}/license`)
+    const res = await axios.get(`${API_BASE}/license`, {
+      timeout: Number(process.env.API_TIMEOUT_MS || 15000),
+      validateStatus: (s) => s < 500
+    })
     return res.data
   } catch (error) {
-    console.error('[IPC license:getInfo] Error:', error)
+    console.error('[IPC license:getInfo] Error:', error?.message || error)
     return {
       status: 500,
       message: 'Failed to get license',
-      error: error.message
+      error: error?.message || String(error)
     }
   }
 })
