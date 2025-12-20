@@ -9,7 +9,7 @@ import FormData from 'form-data'
 import { Readable } from 'stream'
 import icon from '../../resources/icon.png?asset'
 
-const API_BASE = import.meta.env?.VITE_API_BASE_URL || 'http://172.15.2.105:8000'
+const API_BASE = import.meta.env?.VITE_API_BASE_URL || 'http://192.168.8.116:8000'
 let mainWindow
 
 const progressTimers = new Map()
