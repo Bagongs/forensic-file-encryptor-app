@@ -2,7 +2,7 @@
   "name": "file-encryptor-app",
   "version": "1.0.0",
   "productName": "Encryptor Analytics Platform",
-  "description": "An Electron application with React",
+  "description": "Encryptor Analytics Platform Dekstop Application",
   "main": "./out/main/index.js",
   "author": "Digital Forensics",
   "homepage": "https://electron-vite.org",
